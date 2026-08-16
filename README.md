@@ -4,7 +4,9 @@ A pitch-side game clock and flagging tool for hockey. Built to live on a phone h
 
 ## What it does
 
-- Wall-clock anchored timer, so a locked phone or a reloaded tab still reads the right time
+- Counts **down** from the quarter length, so it reads the same as the scoreboard
+- Wall-clock anchored, so a locked phone or a reloaded tab still reads the right time
+- Stamps the time of day each quarter starts and each flag is tapped
 - Four quarters, adjustable quarter length
 - Two teams with editable names and colours, so it works for any fixture
 - Eight tagged flag buttons, four per team, with editable labels
@@ -28,7 +30,16 @@ The XML export writes one instance per flag:
 - a `ROWS` block that colours each row to match the team colour in the app
 - `start` and `end` come from the flag time, minus the lead in and plus the lag out
 
-Set **video offset** to the number of seconds between your video starting and Q1 starting, and the instance times line up with the footage.
+### Lining up with video
+
+Two ways, and the first is exact.
+
+1. **Video start, clock time.** Every flag carries the real time of day it was tapped. Enter the wall clock time your recording started and each clip lands on the right frame, no matter how long the quarter breaks ran. **Use Q1 start** fills the field with the time you pressed start on Q1, which is right if you started recording at the same moment.
+2. **Fine tune.** A seconds nudge applied to every clip, for when the recording start is a few seconds out.
+
+Leave the video start blank and clips fall back to cumulative game time, which assumes no gap between quarters.
+
+The XML carries a comment block listing all four quarter start times, and each instance gets a **Time of day** label.
 
 ## Files
 

@@ -59,6 +59,14 @@
   .clock.ready #time{color:var(--ink)}
   .clock.hold{border-color:var(--hold)}
   .clock.hold #time{color:var(--hold)}
+  .clock.done #time{color:var(--hold)}
+  .clock.done{border-color:var(--hold)}
+  .qs{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:none;margin-bottom:10px}
+  .qs div{background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+    padding:8px 10px;font-size:13px;display:flex;justify-content:space-between;gap:6px}
+  .qs div b{color:var(--dim2);font-weight:800;font-size:11px;letter-spacing:1px;align-self:center}
+  .qs div span{font-variant-numeric:tabular-nums;font-weight:800}
+  .qs div span.non{color:var(--dim2);font-weight:600}
 
   /* primary */
   #startstop{width:100%;border-radius:var(--r);font-size:22px;font-weight:800;
@@ -131,7 +139,7 @@
   .lbl{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim2);
     font-weight:800;margin:14px 0 6px}
   .lbl:first-child{margin-top:0}
-  input[type=text],input[type=number]{width:100%;background:#0B0F14;border:1px solid var(--line);
+  input[type=text],input[type=number],input[type=time]{width:100%;background:#0B0F14;border:1px solid var(--line);
     border-radius:10px;padding:12px;font-size:16px;font-weight:600}
   .sw8{display:flex;gap:7px;margin-top:8px;flex-wrap:wrap}
   .sw8 button{width:36px;height:36px;border-radius:50%;border:2px solid transparent}
@@ -202,6 +210,7 @@
 <div class="sheet" id="sheetLog">
   <div class="grab"></div>
   <div class="sh"><h2>Flag log</h2><button class="close" data-close>Done</button></div>
+  <div class="qs" id="qstarts"></div>
   <div class="body" id="logBody"></div>
   <div class="row3"><button class="btn dng" id="clearq">Clear this quarter</button></div>
 </div>
@@ -216,9 +225,15 @@
       <div><input id="lead" type="number" inputmode="numeric" value="5"><div class="note">Lead in, before the flag</div></div>
       <div><input id="lag" type="number" inputmode="numeric" value="10"><div class="note">Lag out, after the flag</div></div>
     </div>
-    <div class="lbl">Video offset, seconds</div>
+    <div class="lbl">Video start, clock time</div>
+    <div class="two">
+      <div><input id="vstart" type="time" step="1"></div>
+      <div><button class="btn" id="useq1">Use Q1 start</button></div>
+    </div>
+    <div class="note" id="vsnote"></div>
+    <div class="lbl">Fine tune, seconds</div>
     <input id="offset" type="number" inputmode="numeric" value="0">
-    <div class="note">Add the gap between your video starting and Q1 starting. Negative is fine.</div>
+    <div class="note">Nudges every clip. Positive moves them later in the video.</div>
     <div class="lbl">Download</div>
     <div class="acts">
       <button class="btn pri" id="xml">XML for Sportscode</button>
@@ -251,7 +266,7 @@
     </div>
     <div class="lbl">Quarter length, minutes</div>
     <input id="qlen" type="number" inputmode="numeric" min="1" max="45" value="15">
-    <div class="note">Used to work out cumulative game time in the exports.</div>
+    <div class="note">The clock counts down from here, so it reads the same as the scoreboard.</div>
     <div class="lbl">Danger zone</div>
     <button class="btn dng" id="reset">Reset match, delete all flags</button>
     <div class="note" id="ver"></div>
@@ -280,7 +295,7 @@ var DEF={
   teams:[{name:'New Zealand',c:'#38BDF8'},{name:'Opposition',c:'#F59E0B'}],
   actions:['Defence','Attack','Outlet','Press'],
   qlen:15, qtr:1, base:0, startedAt:0, running:false, holdUntil:0,
-  events:[], seq:0
+  events:[], seq:0, qstart:{}
 };
 var S=JSON.parse(JSON.stringify(DEF));
 var storageOK=true;
@@ -313,6 +328,14 @@ function elapsed(){
 function fmt(ms){
   var s=Math.max(0,Math.floor(ms/1000));
   return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+}
+/* The clock counts DOWN, so it reads the same as the scoreboard. */
+function totMs(){ return S.qlen*60*1000; }
+function remaining(){ return Math.max(0, totMs()-elapsed()); }
+function shownMs(ev){ return Math.max(0, totMs()-ev.ms); }
+function clockOf(ms){
+  var d=new Date(ms), p=function(n){ return String(n).padStart(2,'0'); };
+  return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
 }
 
 /* ---------- dom ---------- */
@@ -369,15 +392,18 @@ function paintCounts(){
 }
 
 function render(){
-  var e=elapsed();
-  timeEl.textContent=fmt(e);
-  var cls = S.holdUntil ? 'stopped hold' : (S.running?'running':(e?'stopped':'ready'));
+  var e=elapsed(), r=remaining(), up=(e>0 && r===0);
+  timeEl.textContent=fmt(r);
+  var cls = S.holdUntil ? 'stopped hold' : (up?'stopped done':(S.running?'running':(e?'stopped':'ready')));
   box.className='clock '+cls;
+  var qsTxt=S.qstart[S.qtr] ? ' · '+clockOf(S.qstart[S.qtr]) : '';
   if(S.holdUntil){
     var left=Math.ceil((S.holdUntil-Date.now())/1000);
     stateEl.textContent='Restarts in '+(left>0?left:0)+'s';
+  } else if(up){
+    stateEl.textContent='Time up · Q'+S.qtr+qsTxt;
   } else {
-    stateEl.textContent = S.running ? ('Running · Q'+S.qtr) : (e?('Stopped · Q'+S.qtr):('Ready · Q'+S.qtr));
+    stateEl.textContent = (S.running?'Running':(e?'Stopped':'Ready'))+' · Q'+S.qtr+qsTxt;
   }
   ss.textContent = S.running ? 'Stop clock' : (e?'Restart clock':'Start quarter');
   ss.className = S.running ? 'stop' : 'go';
@@ -388,17 +414,23 @@ function render(){
 }
 
 /* ---------- actions ---------- */
-function start(){ if(S.running&&!S.holdUntil)return; S.base=elapsed(); S.startedAt=Date.now(); S.holdUntil=0; S.running=true; save(); render(); }
+function start(){
+  if(S.running&&!S.holdUntil)return;
+  // First start of a quarter stamps the time of day, the anchor for lining up video
+  if(!S.qstart[S.qtr]) S.qstart[S.qtr]=Date.now();
+  S.base=elapsed(); S.startedAt=Date.now(); S.holdUntil=0; S.running=true; save(); render();
+}
 function stop(){ S.base=elapsed(); S.running=false; S.holdUntil=0; save(); render(); }
 ss.onclick=function(){ S.running?stop():start(); };
 
-function nudge(sec){ S.base=Math.max(0,elapsed()+sec*1000); if(S.running)S.startedAt=Date.now(); save(); render(); }
+// sec moves the SHOWN countdown, so +5s makes the clock read five seconds more, like the scoreboard
+function nudge(sec){ S.base=Math.max(0,elapsed()-sec*1000); if(S.running)S.startedAt=Date.now(); save(); render(); }
 $('plus5').onclick=function(){ nudge(5); };
 $('minus5').onclick=function(){ nudge(-5); };
 
 function buzz(ms){ try{ if(navigator.vibrate)navigator.vibrate(ms); }catch(e){} }
 
-function push(ev){ S.seq++; ev.id=S.seq; S.events.push(ev); save(); paintCounts(); drawLog(); render(); }
+function push(ev){ S.seq++; ev.id=S.seq; ev.w=Date.now(); S.events.push(ev); save(); paintCounts(); drawLog(); render(); }
 
 function flag(t,i,btn){
   var ms=elapsed();
@@ -406,14 +438,14 @@ function flag(t,i,btn){
   btn.classList.add('lit');
   setTimeout(function(){ btn.classList.remove('lit'); },260);
   buzz(35);
-  toast(S.teams[t].c, S.teams[t].name+' · '+S.actions[i]+' · '+fmt(ms));
+  toast(S.teams[t].c, S.teams[t].name+' · '+S.actions[i]+' · '+fmt(totMs()-ms));
 }
 function holdEvent(kind){
   var ms=elapsed();
   S.base=ms; S.running=false; S.holdUntil=Date.now()+40000;
   push({q:S.qtr, ms:ms, t:null, a:kind});
   buzz([25,40,25]);
-  toast('#F0B429', kind+' · '+fmt(ms)+' · 40s hold');
+  toast('#F0B429', kind+' · '+fmt(totMs()-ms)+' · 40s hold');
   render();
 }
 $('corner').onclick=function(){ holdEvent('Corner'); };
@@ -444,8 +476,12 @@ $('tundo').onclick=function(){
   b.className='qtr'; b.innerHTML='Q'+q+'<span class="dot"></span>';
   b.onclick=function(){
     if(S.qtr===q)return;
-    var go=function(){ S.qtr=q; S.base=0; S.startedAt=0; S.running=false; S.holdUntil=0; save(); render(); drawLog(); };
-    if(elapsed()>0) ask('Move to Q'+q+'?','The clock resets to 00:00. Every flag you have logged is kept.',go);
+    var go=function(){
+      S.qtr=q; S.base=0; S.startedAt=0; S.running=false; S.holdUntil=0;
+      if(!S.events.some(function(v){return v.q===q;})) delete S.qstart[q];
+      save(); render(); drawLog();
+    };
+    if(elapsed()>0) ask('Move to Q'+q+'?','The clock resets to '+fmt(totMs())+'. Every flag you have logged is kept.',go);
     else go();
   };
   qwrap.appendChild(b);
@@ -456,7 +492,17 @@ function labelOf(ev){
   return ev.t===null ? ev.a : (S.teams[ev.t].name+' '+S.actions[ev.a]);
 }
 function colourOf(ev){ return ev.t===null ? '#F0B429' : S.teams[ev.t].c; }
+function drawStarts(){
+  var host=$('qstarts'); host.innerHTML='';
+  [1,2,3,4].forEach(function(q){
+    var d=document.createElement('div');
+    var t=S.qstart[q];
+    d.innerHTML='<b>Q'+q+' START</b><span class="'+(t?'':'non')+'">'+(t?clockOf(t):'not yet')+'</span>';
+    host.appendChild(d);
+  });
+}
 function drawLog(){
+  drawStarts();
   if(!S.events.length){
     logBody.innerHTML='<div class="empty">No flags yet.<br>Tap a team button during play and it lands here with the game minute.</div>';
     return;
@@ -465,7 +511,7 @@ function drawLog(){
   S.events.slice().reverse().forEach(function(ev){
     var d=document.createElement('div'); d.className='item';
     d.innerHTML='<span class="sw" style="background:'+colourOf(ev)+'"></span>'+
-                '<span class="q">Q'+ev.q+'</span><span class="t">'+fmt(ev.ms)+'</span>'+
+                '<span class="q">Q'+ev.q+'</span><span class="t">'+fmt(shownMs(ev))+'</span>'+
                 '<span class="k">'+esc(labelOf(ev))+'</span>';
     var x=document.createElement('button'); x.className='x'; x.textContent='×';
     x.onclick=function(){
@@ -478,6 +524,7 @@ function drawLog(){
 $('clearq').onclick=function(){
   ask('Clear Q'+S.qtr+'?','Deletes every flag logged in Q'+S.qtr+' and resets the clock. Other quarters are untouched.',function(){
     S.events=S.events.filter(function(v){ return v.q!==S.qtr; });
+    delete S.qstart[S.qtr];
     S.base=0; S.startedAt=0; S.running=false; S.holdUntil=0;
     save(); paintCounts(); drawLog(); render();
   });
@@ -497,7 +544,7 @@ function closeSheet(){
 $('scrim').onclick=closeSheet;
 [].forEach.call(document.querySelectorAll('[data-close]'),function(b){ b.onclick=closeSheet; });
 $('logbtn').onclick=function(){ drawLog(); openSheet('sheetLog'); };
-$('expbtn').onclick=function(){ $('dump').className=''; $('expnote').textContent=''; openSheet('sheetExp'); };
+$('expbtn').onclick=function(){ $('dump').className=''; $('expnote').textContent=''; paintVsNote(); openSheet('sheetExp'); };
 $('gear').onclick=function(){ fillSettings(); openSheet('sheetSet'); };
 
 var askCb=null;
@@ -546,7 +593,7 @@ $('qlen').addEventListener('input',function(){
 });
 $('reset').onclick=function(){
   ask('Reset the match?','Deletes every flag and puts the clock back to Q1 00:00. Team names and buttons are kept.',function(){
-    S.events=[]; S.seq=0; S.qtr=1; S.base=0; S.startedAt=0; S.running=false; S.holdUntil=0;
+    S.events=[]; S.seq=0; S.qtr=1; S.base=0; S.startedAt=0; S.running=false; S.holdUntil=0; S.qstart={};
     save(); paintCounts(); drawLog(); render(); closeSheet();
   });
 };
@@ -559,7 +606,47 @@ function esc(s){
 }
 function num(id){ var v=parseInt($(id).value,10); return isNaN(v)?0:v; }
 function gameSec(ev){ return Math.floor(ev.ms/1000)+(ev.q-1)*(S.qlen*60); }
-function vidSec(ev){ return gameSec(ev)+num('offset'); }
+
+/* Video alignment.
+   Preferred: the wall clock. Every flag carries the exact time of day it was tapped,
+   so if the recording start time is known the clip position is exact, no drift.
+   Fallback: cumulative game time plus a manual offset, for events logged before v4. */
+function dayBase(){
+  return S.qstart[1] || (S.events[0] && S.events[0].w) || Date.now();
+}
+function videoStartMs(){
+  var v=($('vstart').value||'').trim();
+  if(!v) return null;
+  var p=v.split(':');
+  if(p.length<2) return null;
+  var hh=parseInt(p[0],10), mm=parseInt(p[1],10), sec=p[2]?parseInt(p[2],10):0;
+  if(isNaN(hh)||isNaN(mm)) return null;
+  var d=new Date(dayBase());
+  d.setHours(hh,mm,isNaN(sec)?0:sec,0);
+  return d.getTime();
+}
+function anchored(){ return videoStartMs()!==null; }
+function vidSec(ev){
+  var vs=videoStartMs();
+  if(vs!==null && ev.w) return Math.floor((ev.w-vs)/1000)+num('offset');
+  return gameSec(ev)+num('offset');
+}
+function paintVsNote(){
+  var n=$('vsnote');
+  if(anchored()){
+    var missing=S.events.filter(function(e){ return !e.w; }).length;
+    n.textContent='Locked to the wall clock. Every flag is placed at its exact time of day.'+
+      (missing?' '+missing+' older flag(s) have no timestamp and fall back to game time.':'');
+  } else {
+    n.textContent='Blank means clips are placed by cumulative game time instead, which assumes no gap between quarters. Q1 started '+
+      (S.qstart[1]?clockOf(S.qstart[1]):'not yet')+'.';
+  }
+}
+$('vstart').addEventListener('input',paintVsNote);
+$('useq1').onclick=function(){
+  if(!S.qstart[1]){ $('vsnote').textContent='Q1 has not been started yet, so there is nothing to copy.'; return; }
+  $('vstart').value=clockOf(S.qstart[1]); paintVsNote();
+};
 function codeOf(ev){ return ev.t===null ? ev.a : (S.teams[ev.t].name+' '+S.actions[ev.a]); }
 function abbr(n){
   var c=n.replace(/[^A-Za-z0-9 ]/g,'').trim();
@@ -568,18 +655,23 @@ function abbr(n){
   return c.toUpperCase().slice(0,3)||'TM';
 }
 function stamp(){
-  var d=new Date(), p=function(n){ return String(n).padStart(2,'0'); };
+  var d=new Date(dayBase()), p=function(n){ return String(n).padStart(2,'0'); };
   return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
 }
 function fileBase(){ return abbr(S.teams[0].name)+'-v-'+abbr(S.teams[1].name)+'_'+stamp(); }
 
+// Order instances the way they appear in the video
+function ord(ev){ return (anchored() && ev.w) ? vidSec(ev) : gameSec(ev); }
+function chrono(){ return S.events.slice().sort(function(a,b){ return ord(a)-ord(b); }); }
+
 function csvText(){
-  var out='Quarter,QuarterTime,QuarterSeconds,GameSeconds,VideoSeconds,Team,Action,Code\n';
-  S.events.slice().sort(function(a,b){ return gameSec(a)-gameSec(b); }).forEach(function(ev){
+  var out='Quarter,QuarterStart,ClockShown,ElapsedSeconds,GameSeconds,VideoSeconds,TimeOfDay,Team,Action,Code\n';
+  chrono().forEach(function(ev){
     var team=ev.t===null?'':S.teams[ev.t].name;
     var act =ev.t===null?ev.a:S.actions[ev.a];
     var q=function(s){ return '"'+String(s).replace(/"/g,'""')+'"'; };
-    out+='Q'+ev.q+','+fmt(ev.ms)+','+Math.floor(ev.ms/1000)+','+gameSec(ev)+','+vidSec(ev)+','+
+    out+='Q'+ev.q+','+(S.qstart[ev.q]?clockOf(S.qstart[ev.q]):'')+','+fmt(shownMs(ev))+','+
+         Math.floor(ev.ms/1000)+','+gameSec(ev)+','+vidSec(ev)+','+(ev.w?clockOf(ev.w):'')+','+
          q(team)+','+q(act)+','+q(codeOf(ev))+'\n';
   });
   return out;
@@ -590,9 +682,16 @@ function hex2sc(h){
 }
 function xmlText(){
   var lead=num('lead'), lag=num('lag'), n=0;
-  var evs=S.events.slice().sort(function(a,b){ return gameSec(a)-gameSec(b); });
+  var evs=chrono();
   var out='<?xml version="1.0" encoding="UTF-8"?>\n<file>\n';
-  out+='  <SESSION_INFO>\n    <start_time>'+stamp()+' 00:00:00.000</start_time>\n';
+  out+='  <!-- Quarter start times, wall clock\n';
+  [1,2,3,4].forEach(function(q){
+    out+='       Q'+q+': '+(S.qstart[q]?clockOf(S.qstart[q]):'not started')+'\n';
+  });
+  out+='       Clip times anchored to: '+(anchored()?('video start '+$('vstart').value):'cumulative game time')+'\n';
+  out+='  -->\n';
+  out+='  <SESSION_INFO>\n    <start_time>'+stamp()+' '+
+       (S.qstart[1]?clockOf(S.qstart[1]):'00:00:00')+'.000</start_time>\n';
   out+='    <name>'+esc(S.teams[0].name+' v '+S.teams[1].name)+'</name>\n  </SESSION_INFO>\n';
   out+='  <ALL_INSTANCES>\n';
   evs.forEach(function(ev){
@@ -606,7 +705,8 @@ function xmlText(){
     out+='      <label><group>Team</group><text>'+esc(team)+'</text></label>\n';
     out+='      <label><group>Action</group><text>'+esc(act)+'</text></label>\n';
     out+='      <label><group>Quarter</group><text>Q'+ev.q+'</text></label>\n';
-    out+='      <label><group>Game clock</group><text>'+fmt(ev.ms)+'</text></label>\n';
+    out+='      <label><group>Game clock</group><text>'+fmt(shownMs(ev))+'</text></label>\n';
+    if(ev.w) out+='      <label><group>Time of day</group><text>'+clockOf(ev.w)+'</text></label>\n';
     out+='    </instance>\n';
   });
   out+='  </ALL_INSTANCES>\n  <ROWS>\n';
@@ -713,7 +813,7 @@ window.addEventListener('beforeunload',function(e){
 });
 document.addEventListener('gesturestart',function(e){ e.preventDefault(); });
 
-$('ver').textContent='Game Clock v3'+(storageOK?'':' · local backup is blocked in this browser, export before you close it');
+$('ver').textContent='Game Clock v4'+(storageOK?'':' · local backup is blocked in this browser, export before you close it');
 
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
   navigator.serviceWorker.register('sw.js').catch(function(){});
