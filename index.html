@@ -163,10 +163,11 @@
   .item .k{color:var(--dim);font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .item .x{color:var(--dim2);font-size:20px;padding:2px 8px;font-weight:700}
   .empty{color:var(--dim2);font-size:14px;text-align:center;padding:26px 10px;line-height:1.5}
-  #dump{width:100%;height:150px;background:#0B0F14;color:var(--ink);border:1px solid var(--line);
+  #dump,#qdump{width:100%;height:150px;background:#0B0F14;color:var(--ink);border:1px solid var(--line);
     border-radius:10px;padding:9px;font-size:11px;font-family:ui-monospace,SFMono-Regular,monospace;
     white-space:pre;display:none;margin-top:10px}
-  #dump.show{display:block}
+  #dump.show,#qdump.show{display:block}
+  #qdump{height:120px;margin:0 0 10px;flex:none}
   .note{color:var(--dim2);font-size:12px;line-height:1.5;margin-top:10px}
   #nosleep{position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px}
 </style>
@@ -211,6 +212,11 @@
   <div class="grab"></div>
   <div class="sh"><h2>Flag log</h2><button class="close" data-close>Done</button></div>
   <div class="qs" id="qstarts"></div>
+  <div class="row3" style="margin:0 0 10px">
+    <button class="btn" id="qcopy">Copy times</button>
+    <button class="btn pri" id="qsend">Send to analyst</button>
+  </div>
+  <textarea id="qdump" readonly></textarea>
   <div class="body" id="logBody"></div>
   <div class="row3"><button class="btn dng" id="clearq">Clear this quarter</button></div>
 </div>
@@ -241,6 +247,12 @@
       <button class="btn" id="copy">Copy as text</button>
       <button class="btn" id="share">Share sheet</button>
     </div>
+    <div class="lbl">For the analyst, on its own</div>
+    <div class="acts">
+      <button class="btn" id="qcsv">Quarter starts CSV</button>
+      <button class="btn" id="qtxt">Quarter starts TXT</button>
+    </div>
+    <div class="note">Four quarter start times, wall clock, in their own file. Nothing else in it.</div>
     <textarea id="dump" readonly></textarea>
     <div class="note" id="expnote"></div>
   </div>
@@ -270,6 +282,21 @@
     <div class="lbl">Danger zone</div>
     <button class="btn dng" id="reset">Reset match, delete all flags</button>
     <div class="note" id="ver"></div>
+  </div>
+</div>
+
+<!-- EDIT A QUARTER START -->
+<div class="sheet" id="sheetQEdit">
+  <div class="grab"></div>
+  <div class="sh"><h2 id="qeT">Q1 start time</h2><button class="close" id="qeBack">Back</button></div>
+  <div class="body">
+    <div class="lbl">Time of day the quarter clock started</div>
+    <input id="qeVal" type="time" step="1">
+    <div class="note">Correct this if you pressed start a beat late or early. It only changes what the analyst is given, your flags keep their own timestamps.</div>
+  </div>
+  <div class="row3">
+    <button class="btn dng" id="qeClear">Clear</button>
+    <button class="btn pri" id="qeSave">Save</button>
   </div>
 </div>
 
@@ -498,9 +525,55 @@ function drawStarts(){
     var d=document.createElement('div');
     var t=S.qstart[q];
     d.innerHTML='<b>Q'+q+' START</b><span class="'+(t?'':'non')+'">'+(t?clockOf(t):'not yet')+'</span>';
+    d.onclick=function(){ editStart(q); };
     host.appendChild(d);
   });
 }
+
+/* The quarter start times, on their own, for the analyst */
+function matchName(){ return S.teams[0].name+' v '+S.teams[1].name; }
+function longDate(){
+  var d=new Date(dayBase());
+  return d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'});
+}
+function isoOf(ms){
+  var d=new Date(ms), p=function(n){ return String(n).padStart(2,'0'); };
+  var off=-d.getTimezoneOffset(), sign=off<0?'-':'+', a=Math.abs(off);
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+
+         p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds())+
+         sign+p(Math.floor(a/60))+':'+p(a%60);
+}
+function qStartsText(){
+  var out=matchName()+'\n'+longDate()+'\nQuarter start times, wall clock on my phone\n\n';
+  [1,2,3,4].forEach(function(q){
+    out+='Q'+q+'  '+(S.qstart[q]?clockOf(S.qstart[q]):'not started')+'\n';
+  });
+  if(S.qstart[1]){
+    out+='\nSeconds from Q1 start\n';
+    [1,2,3,4].forEach(function(q){
+      if(S.qstart[q]) out+='Q'+q+'  '+Math.round((S.qstart[q]-S.qstart[1])/1000)+'\n';
+    });
+  }
+  return out;
+}
+function qStartsCsv(){
+  var out='Match,Date,Quarter,StartTimeOfDay,StartISO,SecondsFromQ1Start\n';
+  var q1=S.qstart[1];
+  [1,2,3,4].forEach(function(q){
+    var t=S.qstart[q];
+    out+='"'+matchName().replace(/"/g,'""')+'",'+stamp()+',Q'+q+','+
+         (t?clockOf(t):'')+','+(t?isoOf(t):'')+','+
+         ((t&&q1)?Math.round((t-q1)/1000):'')+'\n';
+  });
+  return out;
+}
+function editStart(q){
+  qeQ=q;
+  $('qeT').textContent='Q'+q+' start time';
+  $('qeVal').value = S.qstart[q] ? clockOf(S.qstart[q]) : '';
+  openSheet('sheetQEdit');
+}
+var qeQ=1;
 function drawLog(){
   drawStarts();
   if(!S.events.length){
@@ -521,6 +594,35 @@ function drawLog(){
     d.appendChild(x); logBody.appendChild(d);
   });
 }
+function parseClock(v,baseMs){
+  v=(v||'').trim(); if(!v) return null;
+  var p=v.split(':');
+  var hh=parseInt(p[0],10), mm=parseInt(p[1],10), sec=p[2]?parseInt(p[2],10):0;
+  if(isNaN(hh)||isNaN(mm)) return null;
+  var d=new Date(baseMs); d.setHours(hh,mm,isNaN(sec)?0:sec,0);
+  return d.getTime();
+}
+$('qeSave').onclick=function(){
+  var t=parseClock($('qeVal').value, S.qstart[qeQ]||dayBase());
+  if(t===null){ return; }
+  S.qstart[qeQ]=t; save(); render(); backToLog();
+};
+$('qeClear').onclick=function(){
+  delete S.qstart[qeQ]; save(); render(); backToLog();
+};
+function backToLog(){ drawLog(); openSheet('sheetLog'); }
+$('qeBack').onclick=backToLog;
+function showQDump(t){ var d=$('qdump'); d.value=t; d.className='show'; }
+$('qcopy').onclick=function(){
+  var t=qStartsText(); showQDump(t);
+  if(navigator.clipboard) navigator.clipboard.writeText(t).catch(function(){});
+};
+$('qsend').onclick=function(){
+  var t=qStartsText();
+  if(navigator.share){ navigator.share({title:matchName()+' quarter starts',text:t}).catch(function(){}); return; }
+  showQDump(t);
+  if(navigator.clipboard) navigator.clipboard.writeText(t).catch(function(){});
+};
 $('clearq').onclick=function(){
   ask('Clear Q'+S.qtr+'?','Deletes every flag logged in Q'+S.qtr+' and resets the clock. Other quarters are untouched.',function(){
     S.events=S.events.filter(function(v){ return v.q!==S.qtr; });
@@ -543,7 +645,7 @@ function closeSheet(){
 }
 $('scrim').onclick=closeSheet;
 [].forEach.call(document.querySelectorAll('[data-close]'),function(b){ b.onclick=closeSheet; });
-$('logbtn').onclick=function(){ drawLog(); openSheet('sheetLog'); };
+$('logbtn').onclick=function(){ $('qdump').className=''; drawLog(); openSheet('sheetLog'); };
 $('expbtn').onclick=function(){ $('dump').className=''; $('expnote').textContent=''; paintVsNote(); openSheet('sheetExp'); };
 $('gear').onclick=function(){ fillSettings(); openSheet('sheetSet'); };
 
@@ -734,6 +836,14 @@ function download(name,text,mime){
 function showDump(t){ var d=$('dump'); d.value=t; d.className='show'; d.focus(); d.select(); }
 function guard(){ if(!S.events.length){ $('expnote').textContent='Nothing logged yet.'; return false; } return true; }
 
+$('qcsv').onclick=function(){
+  if(!S.qstart[1]){ $('expnote').textContent='No quarter has been started yet.'; return; }
+  download(fileBase()+'_quarter-starts.csv', qStartsCsv(), 'text/csv');
+};
+$('qtxt').onclick=function(){
+  if(!S.qstart[1]){ $('expnote').textContent='No quarter has been started yet.'; return; }
+  download(fileBase()+'_quarter-starts.txt', qStartsText(), 'text/plain');
+};
 $('xml').onclick=function(){ if(guard()) download(fileBase()+'.xml', xmlText(), 'text/xml'); };
 $('csv').onclick=function(){ if(guard()) download(fileBase()+'.csv', csvText(), 'text/csv'); };
 $('copy').onclick=function(){
@@ -813,7 +923,7 @@ window.addEventListener('beforeunload',function(e){
 });
 document.addEventListener('gesturestart',function(e){ e.preventDefault(); });
 
-$('ver').textContent='Game Clock v4'+(storageOK?'':' · local backup is blocked in this browser, export before you close it');
+$('ver').textContent='Game Clock v5'+(storageOK?'':' · local backup is blocked in this browser, export before you close it');
 
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
   navigator.serviceWorker.register('sw.js').catch(function(){});

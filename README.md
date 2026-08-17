@@ -41,6 +41,15 @@ Leave the video start blank and clips fall back to cumulative game time, which a
 
 The XML carries a comment block listing all four quarter start times, and each instance gets a **Time of day** label.
 
+### Quarter start times, on their own
+
+The analyst usually wants the four start times as a plain fact, not buried in a code file. Two places to get them:
+
+- **Log sheet** — the four times sit at the top. **Copy times** puts a readable block on the clipboard, **Send to analyst** opens the phone share sheet so it can go straight into a message.
+- **Export sheet** — `Quarter starts CSV` and `Quarter starts TXT` download a file containing nothing but the match, the date, the four times, an ISO timestamp with timezone, and the seconds elapsed from Q1 start.
+
+Tap any of the four tiles in the log to correct a start time if the button was pressed a beat late. That only changes what the analyst is handed; every flag keeps its own timestamp.
+
 ## Files
 
 | File | Purpose |
