@@ -1,5 +1,5 @@
 /* Game Clock service worker: cache first so the app opens with no signal at all. */
-var CACHE = 'gameclock-v5-0';
+var CACHE = 'gameclock-v6-0';
 var ASSETS = [
   './',
   './index.html',

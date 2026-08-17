@@ -46,7 +46,15 @@ The XML carries a comment block listing all four quarter start times, and each i
 The analyst usually wants the four start times as a plain fact, not buried in a code file. Two places to get them:
 
 - **Log sheet** — the four times sit at the top. **Copy times** puts a readable block on the clipboard, **Send to analyst** opens the phone share sheet so it can go straight into a message.
-- **Export sheet** — `Quarter starts CSV` and `Quarter starts TXT` download a file containing nothing but the match, the date, the four times, an ISO timestamp with timezone, and the seconds elapsed from Q1 start.
+- **Export sheet** — `Quarter starts CSV` and `Quarter starts TXT` download a file with nothing else in it.
+
+Both give the times three ways, so the analyst can use whichever suits:
+
+1. **Clock time** — the wall clock reading when the quarter clock started
+2. **Seconds from Q1 start** — cumulative across the match
+3. **Seconds into the recording** — plus an `mm:ss` timecode, once the video start time is set
+
+Set the video start in either sheet, the two fields stay in step and the value survives closing the app. Leave it blank and the third block is simply left out.
 
 Tap any of the four tiles in the log to correct a start time if the button was pressed a beat late. That only changes what the analyst is handed; every flag keeps its own timestamp.
 

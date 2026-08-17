@@ -168,6 +168,11 @@
     white-space:pre;display:none;margin-top:10px}
   #dump.show,#qdump.show{display:block}
   #qdump{height:120px;margin:0 0 10px;flex:none}
+  .vsrow{display:flex;gap:7px;align-items:center;margin-bottom:8px;flex:none}
+  .vsrow b{color:var(--dim2);font-size:11px;letter-spacing:1.2px;font-weight:800;flex:none}
+  .vsrow input{flex:1;padding:9px}
+  .vsrow button{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:10px;padding:10px 12px;font-size:13px;font-weight:800;flex:none}
   .note{color:var(--dim2);font-size:12px;line-height:1.5;margin-top:10px}
   #nosleep{position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px}
 </style>
@@ -212,6 +217,11 @@
   <div class="grab"></div>
   <div class="sh"><h2>Flag log</h2><button class="close" data-close>Done</button></div>
   <div class="qs" id="qstarts"></div>
+  <div class="vsrow">
+    <b>VIDEO START</b>
+    <input id="vstart2" type="time" step="1">
+    <button id="useq1b">Use Q1</button>
+  </div>
   <div class="row3" style="margin:0 0 10px">
     <button class="btn" id="qcopy">Copy times</button>
     <button class="btn pri" id="qsend">Send to analyst</button>
@@ -322,7 +332,7 @@ var DEF={
   teams:[{name:'New Zealand',c:'#38BDF8'},{name:'Opposition',c:'#F59E0B'}],
   actions:['Defence','Attack','Outlet','Press'],
   qlen:15, qtr:1, base:0, startedAt:0, running:false, holdUntil:0,
-  events:[], seq:0, qstart:{}
+  events:[], seq:0, qstart:{}, vstart:''
 };
 var S=JSON.parse(JSON.stringify(DEF));
 var storageOK=true;
@@ -543,27 +553,52 @@ function isoOf(ms){
          p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds())+
          sign+p(Math.floor(a/60))+':'+p(a%60);
 }
+function vSecOf(ms){
+  var vs=videoStartMs();
+  return (vs===null) ? null : Math.round((ms-vs)/1000);
+}
+function mmss(sec){
+  var s=Math.abs(sec), sign=sec<0?'-':'';
+  return sign+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+}
 function qStartsText(){
-  var out=matchName()+'\n'+longDate()+'\nQuarter start times, wall clock on my phone\n\n';
+  var q1=S.qstart[1], vs=videoStartMs();
+  var out=matchName()+'\n'+longDate()+'\n\n';
+
+  out+='QUARTER STARTS, CLOCK TIME\n';
   [1,2,3,4].forEach(function(q){
     out+='Q'+q+'  '+(S.qstart[q]?clockOf(S.qstart[q]):'not started')+'\n';
   });
-  if(S.qstart[1]){
-    out+='\nSeconds from Q1 start\n';
+
+  if(q1){
+    out+='\nSECONDS FROM Q1 START\n';
     [1,2,3,4].forEach(function(q){
-      if(S.qstart[q]) out+='Q'+q+'  '+Math.round((S.qstart[q]-S.qstart[1])/1000)+'\n';
+      if(S.qstart[q]) out+='Q'+q+'  '+Math.round((S.qstart[q]-q1)/1000)+'\n';
     });
+  }
+
+  if(vs!==null){
+    out+='\nSECONDS INTO THE RECORDING, video started '+S.vstart+'\n';
+    [1,2,3,4].forEach(function(q){
+      if(S.qstart[q]){
+        var v=vSecOf(S.qstart[q]);
+        out+='Q'+q+'  '+v+'   ('+mmss(v)+')\n';
+      }
+    });
+  } else {
+    out+='\nVideo start time not set, so seconds into the recording are not included.\n';
   }
   return out;
 }
 function qStartsCsv(){
-  var out='Match,Date,Quarter,StartTimeOfDay,StartISO,SecondsFromQ1Start\n';
+  var out='Match,Date,Quarter,StartTimeOfDay,StartISO,SecondsFromQ1Start,VideoStartTime,SecondsFromVideoStart,TimecodeFromVideoStart\n';
   var q1=S.qstart[1];
   [1,2,3,4].forEach(function(q){
-    var t=S.qstart[q];
+    var t=S.qstart[q], v=t?vSecOf(t):null;
     out+='"'+matchName().replace(/"/g,'""')+'",'+stamp()+',Q'+q+','+
          (t?clockOf(t):'')+','+(t?isoOf(t):'')+','+
-         ((t&&q1)?Math.round((t-q1)/1000):'')+'\n';
+         ((t&&q1)?Math.round((t-q1)/1000):'')+','+
+         (S.vstart||'')+','+(v===null?'':v)+','+(v===null?'':mmss(v))+'\n';
   });
   return out;
 }
@@ -717,7 +752,7 @@ function dayBase(){
   return S.qstart[1] || (S.events[0] && S.events[0].w) || Date.now();
 }
 function videoStartMs(){
-  var v=($('vstart').value||'').trim();
+  var v=(S.vstart||'').trim();
   if(!v) return null;
   var p=v.split(':');
   if(p.length<2) return null;
@@ -744,11 +779,19 @@ function paintVsNote(){
       (S.qstart[1]?clockOf(S.qstart[1]):'not yet')+'.';
   }
 }
-$('vstart').addEventListener('input',paintVsNote);
-$('useq1').onclick=function(){
+function setVStart(v){
+  S.vstart=(v||'').trim(); save();
+  $('vstart').value=S.vstart; $('vstart2').value=S.vstart;
+  paintVsNote();
+}
+$('vstart').addEventListener('input',function(){ setVStart(this.value); });
+$('vstart2').addEventListener('input',function(){ setVStart(this.value); });
+function useQ1(){
   if(!S.qstart[1]){ $('vsnote').textContent='Q1 has not been started yet, so there is nothing to copy.'; return; }
-  $('vstart').value=clockOf(S.qstart[1]); paintVsNote();
-};
+  setVStart(clockOf(S.qstart[1]));
+}
+$('useq1').onclick=useQ1;
+$('useq1b').onclick=useQ1;
 function codeOf(ev){ return ev.t===null ? ev.a : (S.teams[ev.t].name+' '+S.actions[ev.a]); }
 function abbr(n){
   var c=n.replace(/[^A-Za-z0-9 ]/g,'').trim();
@@ -909,6 +952,7 @@ document.addEventListener('visibilitychange',function(){
 
 /* ---------- boot ---------- */
 load();
+$('vstart').value=S.vstart||''; $('vstart2').value=S.vstart||'';
 buildGrid();
 drawLog();
 render();
@@ -923,7 +967,7 @@ window.addEventListener('beforeunload',function(e){
 });
 document.addEventListener('gesturestart',function(e){ e.preventDefault(); });
 
-$('ver').textContent='Game Clock v5'+(storageOK?'':' · local backup is blocked in this browser, export before you close it');
+$('ver').textContent='Game Clock v6'+(storageOK?'':' · local backup is blocked in this browser, export before you close it');
 
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
   navigator.serviceWorker.register('sw.js').catch(function(){});
